@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     }
 
     const model =
-      process.env.GEMINI_MODEL || "gemini-2.5-flash";
+      process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
     const prompt =
       typeof body.prompt === "string" ? body.prompt.trim() : "";
