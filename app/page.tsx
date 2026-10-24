@@ -3,6 +3,32 @@
 
 import { useState, type FormEvent } from "react";
 
+type StoryboardScene = {
+  title: string;
+  content: string;
+};
+
+function splitStoryboard(text: string): StoryboardScene[] {
+  const parts = text
+    .split(/(?=^\s*(?:#{1,4}\s*)?(?:Adegan|Scene)\s*\d+\b)/im)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length <= 1) {
+    return [{ title: "Storyboard Lengkap", content: text }];
+  }
+
+  return parts.map((part, index) => {
+    const firstLine = part.split("\n")[0].trim();
+    const title = firstLine.replace(/^#{1,4}\s*/, "");
+
+    return {
+      title: title || `Adegan ${index + 1}`,
+      content: part,
+    };
+  });
+}
+
 export default function Home() {
   const [idea, setIdea] = useState("");
   const [genre, setGenre] = useState("Sci-Fi");
@@ -320,55 +346,125 @@ export default function Home() {
           </div>
         )}
 
-        {storyboard && !loading && (
-          <section style={styles.panel}>
+        
+{storyboard && !loading && (
+  <section style={styles.panel}>
+    <div
+      style={{
+        color: "#b6a0ff",
+        fontSize: "12px",
+        letterSpacing: "2px",
+        fontWeight: 800,
+      }}
+    >
+      STORYBOARD KAMU
+    </div>
+
+    <h2 style={{ fontSize: "26px", marginBottom: "20px" }}>
+      {genre} · {splitStoryboard(storyboard).length} panel
+    </h2>
+
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+        gap: "18px",
+      }}
+    >
+      {splitStoryboard(storyboard).map((scene, index) => (
+        <article
+          key={`${index}-${scene.title}`}
+          style={{
+            background: "#0d0d14",
+            border: "1px solid #373447",
+            borderRadius: "14px",
+            overflow: "hidden",
+            minWidth: 0,
+          }}
+        >
+          <div
+            style={{
+              aspectRatio: "16 / 9",
+              background:
+                "linear-gradient(135deg, #211b35, #392653, #11111a)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexDirection: "column",
+              gap: "8px",
+              color: "#c4b5fd",
+              padding: "16px",
+              textAlign: "center",
+            }}
+          >
+            <span style={{ fontSize: "30px" }}>🎬</span>
+            <span style={{ fontSize: "12px" }}>
+              VISUAL ADEGAN {String(index + 1).padStart(2, "0")}
+            </span>
+            <span style={{ fontSize: "11px", color: "#a6a1b5" }}>
+              Gambar AI akan ditampilkan di sini
+            </span>
+          </div>
+
+          <div style={{ padding: "18px" }}>
             <div
               style={{
                 color: "#b6a0ff",
-                fontSize: "12px",
-                letterSpacing: "2px",
+                fontSize: "11px",
                 fontWeight: 800,
+                letterSpacing: "1px",
+                marginBottom: "8px",
               }}
             >
-              YOUR STORYBOARD
+              ADEGAN {String(index + 1).padStart(2, "0")}
             </div>
-            <h2 style={{ fontSize: "26px", marginBottom: "20px" }}>
-              {genre} · {sceneCount} scenes
-            </h2>
+
+            <h3 style={{ fontSize: "17px", margin: "0 0 12px" }}>
+              {scene.title}
+            </h3>
+
             <div
               style={{
                 whiteSpace: "pre-wrap",
                 overflowWrap: "anywhere",
-                color: "#e4e0ed",
-                lineHeight: 1.9,
-                fontSize: "15px",
+                color: "#c9c4d6",
+                fontSize: "13px",
+                lineHeight: 1.8,
               }}
             >
-              {storyboard}
+              {scene.content}
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                navigator.clipboard
-                  .writeText(storyboard)
-                  .catch(() => setError("Copy failed. Please select the text manually."));
-              }}
-              style={{
-                marginTop: "24px",
-                padding: "12px 16px",
-                border: "1px solid #51436e",
-                borderRadius: "10px",
-                background: "transparent",
-                color: "#c4b5fd",
-                cursor: "pointer",
-              }}
-            >
-              Copy storyboard
-            </button>
-          </section>
-        )}
+          </div>
+        </article>
+      ))}
+    </div>
 
-        <footer
+    <button
+      type="button"
+      onClick={copyStoryboard}
+      style={{
+        marginTop: "24px",
+        padding: "12px 16px",
+        border: "1px solid #51436e",
+        borderRadius: "10px",
+        background: "transparent",
+        color: "#c4b5fd",
+        cursor: "pointer",
+      }}
+    >
+      Salin seluruh storyboard
+    </button>
+
+    {copyMessage && (
+      <p role="status" style={{ color: "#c4b5fd", fontSize: "13px" }}>
+        {copyMessage}
+      </p>
+    )}
+  </section>
+)}
+
+
+       <footer
           style={{
             marginTop: "36px",
             paddingTop: "20px",
