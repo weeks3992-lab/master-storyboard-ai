@@ -1,4 +1,36 @@
-const [characterImage, setCharacterImage] = useState("");
+"use client";
+
+import { useMemo, useState, type FormEvent } from "react";
+
+type StoryboardScene = { title: string; content: string };
+
+function splitStoryboard(text: string): StoryboardScene[] {
+  const parts = text
+    .split(/(?=^\s*(?:#{1,4}\s*)?(?:Adegan|Scene)\s*\d+\b)/gim)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length <= 1) return text.trim() ? [{ title: "Storyboard Lengkap", content: text }] : [];
+  return parts.map((part, index) => ({
+    title: part.split("\n")[0].trim().replace(/^#{1,4}\s*/, "") || `Adegan ${index + 1}`,
+    content: part,
+  }));
+}
+
+function makeCharacterPrompt(idea: string, storyboard: string, genre: string) {
+  const storySource = storyboard.trim() || idea.trim() || "Cerita belum diisi. Gunakan karakter utama yang dapat disimpulkan dari cerita pengguna.";
+  return `Buat CHARACTER SHEET profesional untuk karakter-karakter utama dan karakter pendukung yang berulang dalam cerita berikut.\n\nCERITA DAN REFERENSI ADEGAN:\n${storySource}\n\nARAH VISUAL: ${genre}, fotorealistis sinematik, detail wajah dan tekstur pakaian realistis.\n\nINSTRUKSI CHARACTER SHEET:\n1. Identifikasi nama karakter penting yang disebutkan dalam cerita. Jangan mengarang nama baru jika nama karakter sudah tersedia.\n2. Buat setiap karakter pada bagian terpisah dengan nama/label yang jelas.\n3. Untuk setiap karakter tampilkan tampak seluruh tubuh dari depan, tiga perempat, samping, dan belakang, serta close-up wajah.\n4. Pertahankan identitas wajah, perkiraan usia dewasa jika sesuai cerita, warna kulit, bentuk tubuh, gaya rambut, kostum khas, alas kaki, dan aksesori secara konsisten pada semua sudut.\n5. Gunakan latar studio abu-abu netral, pencahayaan lembut merata, pose berdiri natural, anatomi realistis, dan tata letak lembar referensi horizontal 16:9.\n6. Kostum harus mengikuti deskripsi cerita. Jika detail penampilan tidak disebutkan, buat pilihan desain yang masuk akal dan konsisten.\n7. Jangan tampilkan adegan aksi atau latar lokasi cerita; fokus pada lembar referensi karakter yang dapat dipakai ulang untuk menjaga kontinuitas visual storyboard.\n8. Hindari karakter duplikat, perubahan wajah antar-sudut, anatomi terdistorsi, teks dekoratif, logo, dan watermark.`;
+}
+
+export default function Home() {
+  const [idea, setIdea] = useState("");
+  const [genre, setGenre] = useState("Cinematic");
+  const [sceneCount, setSceneCount] = useState("3");
+  const [storyboard, setStoryboard] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [copyMessage, setCopyMessage] = useState("");
+  const [characterPrompt, setCharacterPrompt] = useState("");
+  const [characterImage, setCharacterImage] = useState("");
   const [characterError, setCharacterError] = useState("");
   const [characterLoading, setCharacterLoading] = useState(false);
   const scenes = useMemo(() => splitStoryboard(storyboard), [storyboard]);
