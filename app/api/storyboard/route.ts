@@ -63,25 +63,27 @@ Nomor scene berurutan dari 1. Durasi scene harus kira-kira cocok dengan target d
     });
     // Kompatibilitas: versi frontend lama membaca data.storyboard (string),
     // sedangkan frontend baru membaca data.scenes (array). Kembalikan keduanya.
+    const sceneText = (board.scenes as Array<Record<string, unknown>>).map((s, i) => [
+      `## Adegan ${String(i + 1).padStart(2, "0")} — ${String(s.title || "Tanpa judul")}`,
+      `**Durasi:** ${String(s.duration || "—")}`,
+      `**Lokasi:** ${String(s.location || "—")} | **Waktu:** ${String(s.time_of_day || "—")}`,
+      `**Shot & kamera:** ${String(s.shot_type || "—")} | ${String(s.camera_movement || "—")}`,
+      `**Komposisi:** ${String(s.composition || "—")}`,
+      `**Aksi:** ${String(s.action || "—")}`,
+      `**Dialog:** ${String(s.dialogue || "—")}`,
+      `**Pencahayaan & warna:** ${String(s.lighting_color || "—")}`,
+      `**Suara:** ${String(s.sound || "—")}`,
+      `**Kontinuitas:** ${String(s.continuity || "—")}`,
+      `**Prompt gambar:** ${String(s.image_prompt || "—")}`,
+    ].join("\n")).join("\n\n");
+
     const storyboardText = [
       `# ${board.project_title || "Master Storyboard"}`,
       board.logline ? `\n**Logline:** ${board.logline}` : "",
       board.visual_style ? `**Gaya visual:** ${board.visual_style}` : "",
       `**Durasi:** ${board.estimated_duration || duration || "Belum ditentukan"}`,
       "",
-      ...(board.scenes as Array<Record<string, unknown>>).map((s, i) => [
-        `## Adegan ${String(i + 1).padStart(2, "0")} — ${String(s.title || "Tanpa judul")}`,
-        `**Durasi:** ${String(s.duration || "—")}`,
-        `**Lokasi:** ${String(s.location || "—")} | **Waktu:** ${String(s.time_of_day || "—")}`,
-        `**Shot & kamera:** ${String(s.shot_type || "—")} | ${String(s.camera_movement || "—")}`,
-        `**Komposisi:** ${String(s.composition || "—")}`,
-        `**Aksi:** ${String(s.action || "—")}`,
-        `**Dialog:** ${String(s.dialogue || "—")}`,
-        `**Pencahayaan & warna:** ${String(s.lighting_color || "—")}`,
-        `**Suara:** ${String(s.sound || "—")}`,
-        `**Kontinuitas:** ${String(s.continuity || "—")}`,
-        `**Prompt gambar:** ${String(s.image_prompt || "—")}`,
-      ].join("\n")).join("\n\n")
+      sceneText
     ].filter(Boolean).join("\n");
 
     return NextResponse.json({ ...board, storyboard: storyboardText });
