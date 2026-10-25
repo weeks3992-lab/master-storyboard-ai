@@ -31,7 +31,13 @@ function findImageData(payload: any): { data: string; mimeType: string } | null 
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Isi permintaan tidak valid. Muat ulang halaman dan coba lagi." }, { status: 400 });
+    }
+
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
     const projectTitle = typeof body?.projectTitle === "string" ? body.projectTitle.trim() : "";
     const logline = typeof body?.logline === "string" ? body.logline.trim() : "";
@@ -56,18 +62,34 @@ export async function POST(req: Request) {
 
     const imagePrompt = `Create a professional PHOTOREALISTIC CHARACTER SHEET for the recurring and important characters automatically identified from this story. Do not make a sheet for only one protagonist if the story clearly contains multiple named or recurring characters. Story prompt: ${prompt}. Project: ${projectTitle}. Logline: ${logline}. Visual context: ${visualStyle}. Scene references: ${sceneSummary}.\n\nFirst infer the main recurring characters from the story prompt and scene references, prioritizing characters who speak, act, or are mentioned repeatedly. Create a clean, readable landscape 16:9 studio reference board with a separate clearly spaced section for each identified character, ideally up to 4 characters so each remains recognizable. For EACH character, show the same person consistently in full-body front view, side view, back view, and a close-up face portrait with a distinct neutral expression. Give each character a visually distinct, story-appropriate outfit and silhouette. Keep that character's face, apparent age, skin tone, hairstyle, body proportions, outfit, accessories, and colors identical across their views. Infer missing appearance details creatively but coherently from the story. Photorealistic Indonesian / Southeast Asian appearance when appropriate to the story, realistic anatomy and skin texture, detailed fabric, professional film production reference, soft neutral studio lighting, plain light-grey background, clear spacing, all figures fully visible. Do not merge characters together, do not duplicate a character as if they were different people, no extra limbs, no overlapping panels, no logos, no watermark. Avoid long text and tiny labels; visual consistency is the priority.`;
 
-    const response = await fetch(`${base}/interactions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify({
-        model,
-        input: imagePrompt,
-        response_format: { type: "image", mime_type: "image/jpeg", aspect_ratio: "16:9", image_size: "1K" },
-      }),
-      cache: "no-store",
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${base}/interactions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          model,
+          input: imagePrompt,
+          response_format: { type: "image", mime_type: "image/jpeg", aspect_ratio: "16:9", image_size: "1K" },
+        }),
+        cache: "no-store",
+      });
+    } catch {
+      return NextResponse.json({ error: "Tidak bisa terhubung ke layanan Gemini. Periksa koneksi atau coba lagi nanti." }, { status: 502 });
+    }
 
-    const payload = await response.json();
+    // Read the body as text first so HTML/plain-text server errors do not crash JSON parsing.
+    const rawResponse = await response.text();
+    let payload: any;
+    try {
+      payload = JSON.parse(rawResponse);
+    } catch {
+      const preview = rawResponse.replace(/\s+/g, " ").slice(0, 250);
+      return NextResponse.json({
+        error: `Layanan Gemini mengirim respons yang bukan JSON (HTTP ${response.status}). Periksa endpoint/model API. Detail: ${preview || "Respons kosong"}`,
+      }, { status: response.ok ? 502 : response.status });
+    }
+
     if (!response.ok) {
       const detail = payload?.error?.message || payload?.message || `Gemini API mengembalikan status ${response.status}.`;
       return NextResponse.json({ error: `Gagal membuat character sheet: ${detail}` }, { status: response.status });
@@ -75,7 +97,7 @@ export async function POST(req: Request) {
 
     const image = findImageData(payload);
     if (!image) {
-      return NextResponse.json({ error: "API merespons tetapi data gambar tidak ditemukan. Periksa akses model gambar pada akun Gemini API." }, { status: 502 });
+      return NextResponse.json({ error: "Gemini merespons, tetapi data gambar tidak ditemukan pada format respons. Periksa apakah endpoint dan model mendukung output gambar." }, { status: 502 });
     }
     return NextResponse.json({ imageData: image.data, mimeType: image.mimeType });
   } catch (error) {
