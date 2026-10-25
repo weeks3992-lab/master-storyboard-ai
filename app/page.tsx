@@ -36,6 +36,18 @@ export default function Home() {
   const [storyboard, setStoryboard] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+   const [copyMessage, setCopyMessage] = useState("");
+
+   async function copyStoryboard() {
+    try {
+      await navigator.clipboard.writeText(storyboard);
+      setCopyMessage("Storyboard berhasil disalin!");
+    } catch {
+      setCopyMessage(
+        "Gagal menyalin. Silakan salin teks secara manual."
+      );
+    }
+  }
 
   async function generateStoryboard(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
