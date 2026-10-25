@@ -68,17 +68,23 @@ export default function Home() {
     ].join("\n");
     try {
       const response = await fetch("/api/storyboard", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Storyboard gagal dibuat. Silakan coba lagi.");
-      const result = data.storyboard || "AI tidak memberikan hasil. Silakan coba lagi.";
-      setStoryboard(result);
-      setCharacterPrompt(makeCharacterPrompt(idea, result, genre));
-      setCharacterImage("");
-      setCharacterError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Terjadi kesalahan. Silakan coba lagi.");
-    } finally { setLoading(false); }
-  }
+      const raw = await response.text();
+
+let data: any;
+
+try {
+  data = JSON.parse(raw);
+} catch {
+  throw new Error(
+    response.ok
+      ? "Server mengembalikan respons yang bukan JSON."
+      : `Server error (HTTP ${response.status}): ${raw.slice(0, 200)}`
+  );
+}
+
+if (!response.ok) {
+  throw new Error(data?.error || `Request gagal (HTTP ${response.status}).`);
+}
 
   async function generateCharacterSheet() {
     if (!characterPrompt.trim()) prepareCharacterPrompt();
