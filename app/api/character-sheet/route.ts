@@ -35,37 +35,21 @@ export async function POST(req: Request) {
       );
     }
 
-    const model = process.env.GEMINI_TEXT_MODEL || "gemini-2.5-flash";
+   
+    const model = process.env.GEMINI_TEXT_MODEL || "gemini-3.8-flash";
+
     const sceneSummary = scenes
       .map((scene: any, index: number) => {
-        const title = scene?.title || `Adegan ${index + 1}`;
-        const action = scene?.action || "";
-        const continuity = scene?.continuity || "";
-        const imagePrompt = scene?.image_prompt || "";
-        return `${index + 1}. ${title}: ${action} ${continuity} ${imagePrompt}`;
+        return `${index + 1}. ${scene?.title || `Adegan ${index + 1}`}: ${scene?.action || ""} ${scene?.continuity || ""} ${scene?.image_prompt || ""}`;
       })
       .join("\n");
 
     const instruction = `
 You are a professional film character designer.
+Analyze the story and identify all important recurring characters.
+Generate ready-to-copy English image prompts, but DO NOT generate images.
 
-Analyze the story and identify its important named or recurring characters.
-Generate a ready-to-copy English image-generation prompt for each character.
-Do NOT generate images.
-
-For each character return:
-- name
-- role
-- appearance
-- wardrobe
-- personality
-- consistency_rules (array of strings)
-- image_prompt (a detailed prompt for a character reference sheet showing front, side, back, and face close-up views of the SAME character)
-- negative_prompt
-
-Keep characters consistent with the story and visual style.
-Do not invent details that contradict the story.
-Return valid JSON only in this structure:
+Return valid JSON only:
 {
   "characters": [
     {
@@ -74,41 +58,58 @@ Return valid JSON only in this structure:
       "appearance": "Physical description",
       "wardrobe": "Clothing description",
       "personality": "Personality and expression",
-      "consistency_rules": ["Rule 1"],
-      "image_prompt": "Complete English image prompt",
+      "consistency_rules": ["Rule 1", "Rule 2"],
+      "image_prompt": "Detailed character sheet prompt showing front, side, back, and close-up views of the same character",
       "negative_prompt": "Visual errors to avoid"
     }
   ]
 }
 
-Project title: ${projectTitle}
-Story prompt: ${prompt}
+Project: ${projectTitle}
+Story: ${prompt}
 Logline: ${logline}
 Visual style: ${visualStyle}
-Storyboard scenes:
+Scenes:
 ${sceneSummary}
 `;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: instruction }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.7,
-          },
-        }),
-        cache: "no-store",
-      }
-    );
+    let response: Response;
 
-    const payload = await response.json();
+    try {
+      response = await fetch(
+        `${base}/interactions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: JSON.stringify({
+            model,
+            input: instruction,
+            store: false,
+          }),
+          cache: "no-store",
+        }
+      );
+    } catch {
+      return NextResponse.json(
+        { error: "Tidak bisa terhubung ke Gemini. Coba lagi nanti." },
+        { status: 502 }
+      );
+    }
+
+    const rawResponse = await response.text();
+    let payload: any;
+
+    try {
+      payload = JSON.parse(rawResponse);
+    } catch {
+      return NextResponse.json(
+        { error: `Respons Gemini tidak valid (HTTP ${response.status}).` },
+        { status: 502 }
+      );
+    }
 
     if (!response.ok) {
       const detail =
@@ -120,9 +121,12 @@ ${sceneSummary}
     }
 
     const text =
-      payload?.candidates?.[0]?.content?.parts
-        ?.map((part: any) => part.text || "")
-        .join("") || "";
+      payload?.output_text ||
+      payload?.outputs
+        ?.flatMap((item: any) => item?.content || [])
+        ?.map((item: any) => item?.text || "")
+        ?.join("") ||
+      "";
 
     if (!text) {
       return NextResponse.json(
@@ -130,6 +134,7 @@ ${sceneSummary}
         { status: 502 }
       );
     }
+
 
     let result;
     try {
