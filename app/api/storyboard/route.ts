@@ -1,81 +1,68 @@
+import { NextResponse } from "next/server";
 
-export async function GET() {
-  return Response.json({
-    message: "FrameForge AI storyboard API is ready.",
-  });
-}
-
-export async function POST(request: Request) {
+export const runtime = "nodejs";
+export async function POST(req: Request) {
   try {
-    const body = await request.json();
-
+    const { prompt, style, sceneCount, duration, language } = await req.json();
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+      return NextResponse.json({ error: "Prompt cerita wajib diisi." }, { status: 400 });
+    }
     const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return NextResponse.json({ error: "API key belum dikonfigurasi. Salin .env.example menjadi .env.local lalu isi GEMINI_API_KEY." }, { status: 500 });
 
-    if (!apiKey) {
-      return Response.json(
-        { error: "GEMINI_API_KEY belum diatur di Vercel." },
-        { status: 500 }
-      );
-    }
-
-    const model =
-      process.env.GEMINI_MODEL || "gemini-3.8-flash";
-
-    const prompt =
-      typeof body.prompt === "string" ? body.prompt.trim() : "";
-
-    if (!prompt) {
-      return Response.json(
-        { error: "Prompt storyboard tidak boleh kosong." },
-        { status: 400 }
-      );
-    }
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text:
-                    "Create a concise storyboard from this idea. " +
-                    "Describe scenes in order, including visual action, " +
-                    "camera framing, and mood. Story idea: " +
-                    prompt,
-                },
-              ],
-            },
-          ],
-        }),
-      }
-    );
-
-    const data = await response.json();
-
+    const model = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+    const base = (process.env.GEMINI_API_BASE || "https://generativelanguage.googleapis.com/v1beta").replace(/\/$/, "");
+    const n = Math.max(4, Math.min(16, Number(sceneCount) || 8));
+    const instruction = `Anda adalah sutradara, storyboard artist, sinematografer, dan script supervisor profesional.
+Buat MASTER STORYBOARD yang setia pada prompt, masuk akal secara visual, punya kesinambungan karakter/lokasi/objek, dan alur sebab-akibat yang jelas.
+Bahasa output: ${language || "Bahasa Indonesia"}. Gaya visual: ${style || "Sinematik realistis"}. Target durasi: ${duration || "60–90 detik"}. Jumlah scene: tepat ${n}.
+Semua frame wajib 16:9. Jangan mengarang karakter utama baru yang bertentangan dengan prompt. Variasikan shot size dan angle sesuai kebutuhan cerita. Setiap scene harus punya satu aksi utama yang mudah divisualisasikan. PENTING: field dialogue WAJIB berisi dialog lisan yang nyata pada SETIAP scene, jangan pernah kosong, jangan isi dengan tanda strip, dan jangan menulis “tanpa dialog”. Buat 1–2 kalimat singkat yang terasa alami, sesuai kejadian scene, tujuan karakter, dan emosi saat itu. Tulis nama pembicara sebelum dialog, misalnya “MAYA (berbisik): Kita harus pergi sekarang.” Jika tidak ada karakter yang terlihat berbicara, gunakan dialog voice-over/narator atau suara dari karakter di luar layar yang relevan dengan cerita. Jangan mengulang kalimat yang sama antar-scene; jaga konsistensi nama dan karakter. Gunakan bahasa yang dipilih pada Bahasa output untuk dialog juga. Hindari teks/logo/watermark di gambar. image_prompt harus berupa prompt gambar yang rinci dan mandiri, menyebut karakter, pakaian, lingkungan, aksi, framing 16:9, lensa/lighting, gaya visual, dan kontinuitas yang relevan. Jangan minta teks tertulis muncul di gambar.
+Kembalikan JSON valid saja, tanpa markdown, dengan struktur:
+{
+ "project_title":"string",
+ "logline":"string",
+ "visual_style":"string",
+ "aspect_ratio":"16:9",
+ "estimated_duration":"string",
+ "scenes":[
+  {"scene":1,"title":"string","duration":"contoh 00:00-00:06","location":"string","time_of_day":"string","shot_type":"string","camera_movement":"string","composition":"string","action":"string","dialogue":"string","lighting_color":"string","sound":"string","continuity":"string","image_prompt":"string"}
+ ]
+}
+Nomor scene berurutan dari 1. Durasi scene harus kira-kira cocok dengan target durasi. Semua properti wajib ada. Pastikan dialogue untuk setiap scene berisi dialog lisan dengan nama pembicara dan ucapan, bukan deskripsi aksi atau suara latar.`;
+    const response = await fetch(`${base}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: instruction }] },
+        contents: [{ role: "user", parts: [{ text: `PROMPT CERITA:\n${prompt.trim()}` }] }],
+        generationConfig: { temperature: 0.65, responseMimeType: "application/json" }
+      }),
+      cache: "no-store"
+    });
+    const payload = await response.json();
     if (!response.ok) {
-      return Response.json(
-        { error: data.error?.message || "AI request failed." },
-        { status: response.status }
-      );
+      const detail = payload?.error?.message || `Gemini API mengembalikan status ${response.status}.`;
+      return NextResponse.json({ error: `Gemini API: ${detail}` }, { status: response.status });
     }
-
-    const storyboard =
-      data.candidates?.[0]?.content?.parts
-        ?.map((part: { text?: string }) => part.text || "")
-        .join("\n") || "No storyboard was returned.";
-
-    return Response.json({ storyboard });
-  } catch {
-    return Response.json(
-      { error: "Permintaan tidak valid atau terjadi kesalahan server." },
-      { status: 500 }
-    );
+    const text = payload?.candidates?.[0]?.content?.parts?.map((p: {text?:string}) => p.text || "").join("");
+    if (!text) return NextResponse.json({ error: "Model tidak mengembalikan storyboard. Coba prompt lain atau periksa model API." }, { status: 502 });
+    let board;
+    try { board = JSON.parse(text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim()); }
+    catch { return NextResponse.json({ error: "Respons model bukan JSON valid. Coba generate kembali." }, { status: 502 }); }
+    if (!Array.isArray(board.scenes) || !board.scenes.length) return NextResponse.json({ error: "Storyboard tidak berisi scene yang valid." }, { status: 502 });
+    board.scenes = board.scenes.slice(0, n).map((s: Record<string, unknown>, i: number) => {
+      const dialogue = typeof s.dialogue === "string" ? s.dialogue.trim() : "";
+      return {
+        ...s,
+        scene: i + 1,
+        // Jangan biarkan field dialog kosong jika model mengabaikan instruksi.
+        dialogue: dialogue || (String(language || "Bahasa Indonesia").toLowerCase().startsWith("english")
+          ? `NARRATOR (voice-over): ${String(s.action || s.title || "The story continues.").trim()}`
+          : `NARATOR (voice-over): ${String(s.action || s.title || "Cerita berlanjut.").trim()}`)
+      };
+    });
+    return NextResponse.json(board);
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Terjadi kesalahan server." }, { status: 500 });
   }
 }
-
