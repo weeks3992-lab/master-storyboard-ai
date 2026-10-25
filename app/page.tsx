@@ -48,15 +48,19 @@ export default function Home() {
     setError("");
     setStoryboard("");
 
-    const prompt = [
-      `Create a ${genre} film storyboard based on this idea: ${idea.trim()}`,
-      `Create exactly ${sceneCount} numbered scenes.`,
-      "For every scene include:",
-      "Scene title, visual action, camera angle and movement,",
-      "lighting and mood, and a detailed image generation prompt.",
-      "Keep the scenes in chronological order.",
-      "Use clear headings and separate each scene.",
-    ].join("\n");
+    
+const prompt = [
+  `Create a ${genre} film storyboard based on this idea: ${idea.trim()}`,
+  `Create exactly ${sceneCount} numbered scenes.`,
+  "Write the storyboard descriptions in Indonesian.",
+  "For every scene include a title, visual action, camera angle and movement, lighting, mood, and a detailed image generation prompt.",
+  genre === "Cinematic"
+    ? "Use cinematic visual storytelling, dramatic lighting, film-quality composition, expressive camera movement, atmospheric depth, realistic textures, and professional color grading."
+    : `Apply the visual style and storytelling conventions of the ${genre} genre.`,
+  "Keep the scenes in chronological order.",
+  "Use clear headings and separate each scene.",
+].join("\n");
+
 
     try {
       const response = await fetch("/api/storyboard", {
@@ -253,6 +257,7 @@ export default function Home() {
               >
                 <option>Sci-Fi</option>
                 <option>Fantasy</option>
+                <option>Cinematic</option>
                 <option>Action</option>
                 <option>Adventure</option>
                 <option>Horror</option>
