@@ -155,16 +155,9 @@ export default function Home() {
           {characterImage && <div style={{ marginTop: "20px" }}><h3>Hasil Character Sheet</h3><img src={characterImage} alt="Character Sheet hasil generasi AI" style={{ display: "block", width: "100%", height: "auto", borderRadius: "12px", border: "1px solid #373447" }} /><a href={characterImage} download="frameforge-character-sheet.jpg" style={{ display: "inline-block", marginTop: "12px", color: "#c4b5fd" }}>Simpan gambar Character Sheet</a></div>}
         </section>}
 
-       {storyboard && !loading && (
+      {storyboard && !loading && (
   <section style={styles.panel}>
-    <div
-      style={{
-        color: "#b6a0ff",
-        fontSize: "12px",
-        letterSpacing: "2px",
-        fontWeight: 800,
-      }}
-    >
+    <div style={{ color: "#b6a0ff", fontSize: "12px", letterSpacing: "2px", fontWeight: 800 }}>
       STORYBOARD KAMU
     </div>
 
@@ -172,73 +165,24 @@ export default function Home() {
       {genre} · {scenes.length} panel
     </h2>
 
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-        gap: "18px",
-      }}
-    >
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
       {scenes.map((scene, index) => (
         <article
           key={`${index}-${scene.title}`}
-          style={{
-            background: "#0d0d14",
-            border: "1px solid #373447",
-            borderRadius: "14px",
-            overflow: "hidden",
-            minWidth: 0,
-          }}
+          style={{ background: "#0d0d14", border: "1px solid #373447", borderRadius: "14px", overflow: "hidden", minWidth: 0 }}
         >
-          <div
-            style={{
-              aspectRatio: "16 / 9",
-              background: "linear-gradient(135deg, #211b35, #392653, #11111a)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexDirection: "column",
-              gap: "8px",
-              color: "#c4b5fd",
-              padding: "16px",
-              textAlign: "center",
-            }}
-          >
+          <div style={{ aspectRatio: "16 / 9", background: "linear-gradient(135deg, #211b35, #392653, #11111a)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "8px", color: "#c4b5fd", padding: "16px", textAlign: "center" }}>
             <span style={{ fontSize: "30px" }}>🎬</span>
-            <span style={{ fontSize: "12px" }}>
-              VISUAL ADEGAN {String(index + 1).padStart(2, "0")}
-            </span>
-            <span style={{ fontSize: "11px", color: "#a6a1b5" }}>
-              Gambar AI akan ditampilkan di sini
-            </span>
+            <span style={{ fontSize: "12px" }}>VISUAL ADEGAN {String(index + 1).padStart(2, "0")}</span>
+            <span style={{ fontSize: "11px", color: "#a6a1b5" }}>Gambar AI akan ditampilkan di sini</span>
           </div>
 
           <div style={{ padding: "18px" }}>
-            <div
-              style={{
-                color: "#b6a0ff",
-                fontSize: "11px",
-                fontWeight: 800,
-                letterSpacing: "1px",
-                marginBottom: "8px",
-              }}
-            >
+            <div style={{ color: "#b6a0ff", fontSize: "11px", fontWeight: 800, letterSpacing: "1px", marginBottom: "8px" }}>
               ADEGAN {String(index + 1).padStart(2, "0")}
             </div>
-
-            <h3 style={{ fontSize: "17px", margin: "0 0 12px" }}>
-              {scene.title}
-            </h3>
-
-            <div
-              style={{
-                whiteSpace: "pre-wrap",
-                overflowWrap: "anywhere",
-                color: "#c9c4d6",
-                fontSize: "13px",
-                lineHeight: 1.8,
-              }}
-            >
+            <h3 style={{ fontSize: "17px", margin: "0 0 12px" }}>{scene.title}</h3>
+            <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", color: "#c9c4d6", fontSize: "13px", lineHeight: 1.8 }}>
               {scene.content}
             </div>
           </div>
@@ -246,11 +190,7 @@ export default function Home() {
       ))}
     </div>
 
-    <button
-      type="button"
-      onClick={copyStoryboard}
-      style={{ ...styles.secondaryButton, marginTop: "24px" }}
-    >
+    <button type="button" onClick={copyStoryboard} style={{ ...styles.secondaryButton, marginTop: "24px" }}>
       Salin seluruh storyboard
     </button>
 
