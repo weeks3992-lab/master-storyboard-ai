@@ -1,188 +1,167 @@
- "use client";
-import { useMemo, useState } from "react";
+"use client";
 
-type Scene = {
-  scene: number; title: string; duration: string; location: string; time_of_day: string;
-  shot_type: string; camera_movement: string; composition: string; action: string;
-  dialogue: string; lighting_color: string; sound: string; continuity: string;
-  image_prompt: string;
-};
-type Board = { project_title: string; logline: string; visual_style: string; aspect_ratio: string; estimated_duration: string; scenes: Scene[] };
+import { useMemo, useState, type FormEvent } from "react";
 
-const example = "Seorang kurir muda menemukan robot kecil yang rusak di gang kota futuristik saat hujan. Ia memperbaikinya, lalu robot itu membawanya ke atap gedung untuk melihat matahari terbit. Nuansa sci-fi emosional, sinematik, tanpa kekerasan.";
-const styles = ["Sinematik realistis", "Anime film", "Stop-motion clay", "Komik noir", "Iklan premium", "Fantasi epik", "Dokumenter", "Custom"];
-const blankBoard: Board = {project_title:"Storyboard baru",logline:"",visual_style:"",aspect_ratio:"16:9",estimated_duration:"",scenes:[]};
+type StoryboardScene = { title: string; content: string };
+
+function splitStoryboard(text: string): StoryboardScene[] {
+  const parts = text
+    .split(/(?=^\s*(?:#{1,4}\s*)?(?:Adegan|Scene)\s*\d+\b)/gim)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length <= 1) return text.trim() ? [{ title: "Storyboard Lengkap", content: text }] : [];
+  return parts.map((part, index) => ({
+    title: part.split("\n")[0].trim().replace(/^#{1,4}\s*/, "") || `Adegan ${index + 1}`,
+    content: part,
+  }));
+}
+
+function makeCharacterPrompt(idea: string, storyboard: string, genre: string) {
+  const storySource = storyboard.trim() || idea.trim() || "Cerita belum diisi. Gunakan karakter utama yang dapat disimpulkan dari cerita pengguna.";
+  return `Buat CHARACTER SHEET profesional untuk karakter-karakter utama dan karakter pendukung yang berulang dalam cerita berikut.\n\nCERITA DAN REFERENSI ADEGAN:\n${storySource}\n\nARAH VISUAL: ${genre}, fotorealistis sinematik, detail wajah dan tekstur pakaian realistis.\n\nINSTRUKSI CHARACTER SHEET:\n1. Identifikasi nama karakter penting yang disebutkan dalam cerita. Jangan mengarang nama baru jika nama karakter sudah tersedia.\n2. Buat setiap karakter pada bagian terpisah dengan nama/label yang jelas.\n3. Untuk setiap karakter tampilkan tampak seluruh tubuh dari depan, tiga perempat, samping, dan belakang, serta close-up wajah.\n4. Pertahankan identitas wajah, perkiraan usia dewasa jika sesuai cerita, warna kulit, bentuk tubuh, gaya rambut, kostum khas, alas kaki, dan aksesori secara konsisten pada semua sudut.\n5. Gunakan latar studio abu-abu netral, pencahayaan lembut merata, pose berdiri natural, anatomi realistis, dan tata letak lembar referensi horizontal 16:9.\n6. Kostum harus mengikuti deskripsi cerita. Jika detail penampilan tidak disebutkan, buat pilihan desain yang masuk akal dan konsisten.\n7. Jangan tampilkan adegan aksi atau latar lokasi cerita; fokus pada lembar referensi karakter yang dapat dipakai ulang untuk menjaga kontinuitas visual storyboard.\n8. Hindari karakter duplikat, perubahan wajah antar-sudut, anatomi terdistorsi, teks dekoratif, logo, dan watermark.`;
+}
 
 export default function Home() {
-  const [prompt,setPrompt] = useState("");
-  const [style,setStyle] = useState(styles[0]);
-  const [sceneCount,setSceneCount] = useState(8);
-  const [duration,setDuration] = useState("60–90 detik");
-  const [language,setLanguage] = useState("Bahasa Indonesia");
-  const [loading,setLoading] = useState(false);
-  const [error,setError] = useState("");
-  const [board,setBoard] = useState<Board|null>(null);
-  const [active,setActive] = useState(0);
-  const [customStyle,setCustomStyle] = useState("");
-  const [copied,setCopied] = useState(false);
-  const [sceneImages,setSceneImages] = useState<Record<number,string>>({});
-  const [imageLoading,setImageLoading] = useState(false);
-  const [imageErrors,setImageErrors] = useState<Record<number,string>>({});
-  const [characterSheet,setCharacterSheet] = useState<string>("");
-  const [characterSheetLoading,setCharacterSheetLoading] = useState(false);
-  const [characterSheetError,setCharacterSheetError] = useState("");
+  const [idea, setIdea] = useState("");
+  const [genre, setGenre] = useState("Cinematic");
+  const [sceneCount, setSceneCount] = useState("3");
+  const [storyboard, setStoryboard] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [copyMessage, setCopyMessage] = useState("");
+  const [characterPrompt, setCharacterPrompt] = useState("");
+  const [characterImage, setCharacterImage] = useState("");
+  const [characterError, setCharacterError] = useState("");
+  const [characterLoading, setCharacterLoading] = useState(false);
+  const scenes = useMemo(() => splitStoryboard(storyboard), [storyboard]);
 
-  const current = board?.scenes[active];
-  const exportText = useMemo(()=> board ? JSON.stringify(board,null,2) : "",[board]);
+  function prepareCharacterPrompt() {
+    setCharacterPrompt(makeCharacterPrompt(idea, storyboard, genre));
+    setCharacterError("");
+  }
 
-  async function generate() {
-    if (!prompt.trim()) { setError("Masukkan prompt cerita terlebih dahulu."); return; }
-    setLoading(true); setError(""); setBoard(null); setActive(0); setSceneImages({}); setImageErrors({}); setCharacterSheet(""); setCharacterSheetError("");
+  async function copyStoryboard() {
     try {
-      const res = await fetch("/api/storyboard",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt,style:style==="Custom"?(customStyle||"Sinematik realistis"):style,sceneCount,duration,language})});
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal membuat storyboard.");
-      setBoard(data);
-    } catch(e) { setError(e instanceof Error ? e.message : "Terjadi kesalahan."); }
-    finally { setLoading(false); }
+      await navigator.clipboard.writeText(storyboard);
+      setCopyMessage("Storyboard berhasil disalin!");
+    } catch {
+      setCopyMessage("Gagal menyalin. Silakan pilih dan salin teks secara manual.");
+    }
   }
 
-  function download() {
-    if (!board) return;
-    const blob = new Blob([JSON.stringify(board,null,2)],{type:"application/json"});
-    const url = URL.createObjectURL(blob); const a = document.createElement("a");
-    a.href=url; a.download="master-storyboard.json"; a.click(); URL.revokeObjectURL(url);
-  }
-  async function copyPrompt(text:string) {
-    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(()=>setCopied(false),1400); } catch {}
+  async function generateStoryboard(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!idea.trim()) { setError("Masukkan ide cerita terlebih dahulu."); return; }
+    setLoading(true); setError(""); setStoryboard(""); setCopyMessage("");
+    const cinematicDirection = genre === "Cinematic"
+      ? "Gunakan gaya visual film sinematik: komposisi gambar profesional, pencahayaan dramatis, gerakan kamera ekspresif, kedalaman atmosfer, tekstur realistis, dan color grading yang konsisten."
+      : `Terapkan gaya visual dan ciri penceritaan genre ${genre}.`;
+    const prompt = [
+      `Buat storyboard film bergenre ${genre} berdasarkan ide berikut: ${idea.trim()}`,
+      `Buat tepat ${sceneCount} adegan dan beri nomor secara berurutan.`,
+      "WAJIB tulis seluruh storyboard dalam Bahasa Indonesia.",
+      "Untuk setiap adegan, sertakan judul, deskripsi visual, aksi karakter, sudut dan gerakan kamera, pencahayaan dan suasana, serta prompt gambar yang terperinci.",
+      cinematicDirection,
+      "Gunakan format yang konsisten. Mulai setiap bagian dengan 'ADEGAN 1 — Judul', lalu lanjutkan ADEGAN 2, dan seterusnya.",
+      "Jaga konsistensi karakter, kostum, lokasi, dan urutan waktu di seluruh adegan.",
+      "Prompt gambar harus menggambarkan isi adegan secara spesifik. Boleh gunakan istilah teknis visual berbahasa Inggris jika lebih tepat, tetapi penjelasan storyboard harus berbahasa Indonesia.",
+    ].join("\n");
+    try {
+      const response = await fetch("/api/storyboard", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Storyboard gagal dibuat. Silakan coba lagi.");
+      const result = data.storyboard || "AI tidak memberikan hasil. Silakan coba lagi.";
+      setStoryboard(result);
+      setCharacterPrompt(makeCharacterPrompt(idea, result, genre));
+      setCharacterImage("");
+      setCharacterError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan. Silakan coba lagi.");
+    } finally { setLoading(false); }
   }
 
   async function generateCharacterSheet() {
-    if (!board) return;
-    setCharacterSheetLoading(true);
-    setCharacterSheetError("");
+    if (!characterPrompt.trim()) prepareCharacterPrompt();
+    const promptToSend = characterPrompt.trim() || makeCharacterPrompt(idea, storyboard, genre);
+    if (!idea.trim() && !storyboard.trim()) {
+      setCharacterError("Isi ide cerita atau buat storyboard terlebih dahulu agar karakter bisa diidentifikasi.");
+      return;
+    }
+    setCharacterLoading(true); setCharacterError(""); setCharacterImage("");
     try {
-      const res = await fetch("/api/character-sheet", {
+      const response = await fetch("/api/character-sheet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          projectTitle: board.project_title,
-          logline: board.logline,
-          visualStyle: board.visual_style || style,
-          scenes: board.scenes.map((scene) => ({ title: scene.title, action: scene.action, continuity: scene.continuity, image_prompt: scene.image_prompt })),
-        }),
+        body: JSON.stringify({ prompt: promptToSend, projectTitle: "FrameForge AI Character Sheet", logline: idea, visualStyle: genre, scenes: storyboard }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Character sheet gagal dibuat. Silakan coba lagi.");
-      if (!data.imageData) throw new Error("Model tidak mengembalikan gambar. Periksa akses model gambar di akun Gemini API.");
-      setCharacterSheet(`data:${data.mimeType || "image/jpeg"};base64,${data.imageData}`);
-    } catch (e) {
-      setCharacterSheetError(e instanceof Error ? e.message : "Terjadi kesalahan saat membuat character sheet.");
-    } finally {
-      setCharacterSheetLoading(false);
-    }
+      const raw = await response.text();
+      let data: { imageData?: string; mimeType?: string; error?: string };
+      try { data = JSON.parse(raw); } catch { throw new Error(`Respons server tidak valid (HTTP ${response.status}). ${raw.slice(0, 220)}`); }
+      if (!response.ok) throw new Error(data.error || `Gagal membuat Character Sheet (HTTP ${response.status}).`);
+      if (!data.imageData) throw new Error("API tidak mengembalikan gambar. Periksa konfigurasi endpoint dan model Gemini.");
+      const imageData = data.imageData.startsWith("data:") ? data.imageData : `data:${data.mimeType || "image/jpeg"};base64,${data.imageData}`;
+      setCharacterImage(imageData);
+    } catch (err) {
+      setCharacterError(err instanceof Error ? err.message : "Character Sheet gagal dibuat. Silakan coba lagi.");
+    } finally { setCharacterLoading(false); }
   }
 
-  async function generateSceneImage(scene: Scene) {
-    setImageLoading(true);
-    setImageErrors(previous => ({ ...previous, [scene.scene]: "" }));
-    try {
-      const res = await fetch("/api/scene-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: scene.image_prompt, style: board?.visual_style || style, aspectRatio: "16:9" }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gambar gagal dibuat. Silakan coba lagi.");
-      if (!data.imageData) throw new Error("Model tidak mengembalikan data gambar. Coba lagi nanti.");
-      setSceneImages(previous => ({ ...previous, [scene.scene]: `data:${data.mimeType || "image/jpeg"};base64,${data.imageData}` }));
-    } catch (e) {
-      setImageErrors(previous => ({ ...previous, [scene.scene]: e instanceof Error ? e.message : "Terjadi kesalahan saat membuat gambar." }));
-    } finally {
-      setImageLoading(false);
-    }
-  }
+  const styles = {
+    page: { minHeight: "100vh", background: "#0b0b10", color: "#f4f1fa", fontFamily: "Arial, sans-serif", padding: "28px 20px 64px" } as const,
+    container: { maxWidth: "1000px", margin: "0 auto" } as const,
+    panel: { background: "#14141d", border: "1px solid #2b2938", borderRadius: "18px", padding: "24px", marginTop: "24px" } as const,
+    field: { width: "100%", boxSizing: "border-box" as const, padding: "13px 14px", borderRadius: "10px", border: "1px solid #373447", background: "#0d0d14", color: "#ffffff", fontSize: "15px", outlineColor: "#a78bfa" } as const,
+    label: { display: "block", marginBottom: "9px", fontSize: "14px", fontWeight: 700, color: "#ded9eb" } as const,
+    secondaryButton: { padding: "12px 16px", border: "1px solid #51436e", borderRadius: "10px", background: "transparent", color: "#c4b5fd", cursor: "pointer", fontWeight: 700 } as const,
+  };
 
-  return <main className="shell">
-    <header className="topbar">
-      <a className="brand" href="#"><span className="brandIcon">F</span><span>FRAMEFORGE<small>STORYBOARD STUDIO</small></span></a>
-      <div className="topRight"><span className="statusDot"/> AI STORY DEVELOPMENT <span className="version">BETA 01</span></div>
-    </header>
-    <section className="hero">
-      <div className="eyebrow"><span/> FROM PROMPT TO PICTURE</div>
-      <h1>Bangun cerita.<br/><em>Lihat setiap frame.</em></h1>
-      <p className="heroSub">Ubah ide mentah menjadi master storyboard yang terstruktur, sinematik, dan siap dikembangkan—scene demi scene dalam format 16:9.</p>
-    </section>
-    <section className="workspace">
-      <aside className="controlPanel">
-        <div className="panelHeading"><div><span className="step">01</span><h2>Story brief</h2></div><span className="required">REQUIRED</span></div>
-        <label htmlFor="prompt">CERITAKAN IDE ANDA</label>
-        <textarea id="prompt" value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="Jelaskan karakter, tujuan, konflik, dunia, dan akhir cerita..." rows={7}/>
-        <div className="quickExample"><span>Butuh inspirasi?</span><button onClick={()=>setPrompt(example)}>Gunakan contoh ↗</button></div>
-        <div className="fieldGrid">
-          <div><label>GAYA VISUAL</label><select value={style} onChange={e=>setStyle(e.target.value)}>{styles.map(s=><option key={s}>{s}</option>)}</select></div>
-          <div><label>JUMLAH SCENE</label><select value={sceneCount} onChange={e=>setSceneCount(Number(e.target.value))}>{[4,6,8,10,12,16].map(n=><option key={n} value={n}>{n} scene</option>)}</select></div>
-          <div><label>ESTIMASI DURASI</label><select value={duration} onChange={e=>setDuration(e.target.value)}>{["15–30 detik","30–60 detik","60–90 detik","2–3 menit","5 menit+"].map(d=><option key={d}>{d}</option>)}</select></div>
-          <div><label>BAHASA OUTPUT</label><select value={language} onChange={e=>setLanguage(e.target.value)}><option>Bahasa Indonesia</option><option>English</option></select></div>
-        </div>
-        {style==="Custom" && <div className="customStyle"><label>GAYA KUSTOM</label><input value={customStyle} onChange={e=>setCustomStyle(e.target.value)} placeholder="Contoh: analog 35mm, grain halus..."/></div>}
-        <div className="ratioRow"><div><span className="ratioIcon">▱</span><div><b>Aspect ratio</b><small>Format frame sinematik standar</small></div></div><strong>16:9</strong></div>
-        {error && <div className="error">{error}</div>}
-        <button className="generateBtn" onClick={generate} disabled={loading}>{loading?<><span className="spinner"/> MENYUSUN STORYBOARD...</>:<>✦ &nbsp; GENERATE MASTER STORYBOARD <span>→</span></>}</button>
-        <p className="privacyNote"><span>▣</span> API key diproses di server. Jangan bagikan key di prompt.</p>
-      </aside>
+  return (
+    <main style={styles.page}>
+      <div style={styles.container}>
+        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap", borderBottom: "1px solid #292735", paddingBottom: "20px" }}>
+          <div><div style={{ color: "#b6a0ff", fontSize: "13px", fontWeight: 800, letterSpacing: "3px" }}>FRAMEFORGE AI</div><div style={{ color: "#a6a1b5", fontSize: "13px", marginTop: "6px" }}>RUANG KERJA SINEMATIK ANDA</div></div>
+          <span style={{ border: "1px solid #403458", color: "#c4b5fd", borderRadius: "30px", padding: "8px 12px", fontSize: "12px" }}>STUDIO STORYBOARD</span>
+        </header>
+        <section style={{ padding: "42px 0 12px" }}>
+          <p style={{ color: "#b6a0ff", fontSize: "13px", fontWeight: 700, letterSpacing: "2px" }}>DARI IDE MENJADI LAYAR</p>
+          <h1 style={{ fontSize: "clamp(36px, 7vw, 64px)", lineHeight: 1.08, letterSpacing: "-2px", margin: "14px 0" }}>Ubah ceritamu menjadi <span style={{ color: "#b6a0ff" }}>storyboard.</span></h1>
+          <p style={{ color: "#aaa5ba", fontSize: "16px", lineHeight: 1.8, maxWidth: "650px" }}>Kembangkan ide menjadi adegan sinematik dengan deskripsi visual, arahan kamera, suasana, dan prompt gambar.</p>
+        </section>
 
-      <section className="outputPanel">
-        {!board && !loading && <div className="emptyState">
-          <div className="emptyGraphic"><div className="frame f1"><span>01</span><i>◌</i></div><div className="frame f2"><span>02</span><i>⌁</i></div><div className="frame f3"><span>03</span><i>✳</i></div><div className="play">▶</div></div>
-          <span className="emptyKicker">YOUR CREATIVE CANVAS</span><h2>Ide Anda, frame demi frame.</h2><p>Storyboard yang dihasilkan akan tampil di sini lengkap dengan arahan visual, kamera, aksi, dialog, pencahayaan, dan kontinuitas tiap scene.</p>
-          <div className="emptyFeatures"><span>✦ Shot direction</span><span>✦ Visual prompts</span><span>✦ Continuity notes</span></div>
-        </div>}
-        {loading && <div className="loadingState"><div className="loaderOrb">✦</div><h2>Merangkai cerita menjadi frame…</h2><p>AI sedang menyusun alur, shot, aksi, dan detail visual yang konsisten.</p><div className="loadingBar"><span/></div><small>Biasanya perlu beberapa detik</small></div>}
-        {board && <>
-          <div className="boardTop"><div><div className="eyebrow"><span/> MASTER STORYBOARD</div><h2>{board.project_title}</h2><p>{board.logline}</p></div><button className="exportBtn" onClick={download}>↓ <span>EXPORT JSON</span></button></div>
-          <div className="characterSheetPanel">
-            <div className="characterSheetIntro">
-              <div><span className="infoLabel">KONSISTENSI KARAKTER</span><h3>Character Sheet Realistis</h3><p>AI mendeteksi karakter penting dari prompt cerita dan adegan, lalu membuat lembar referensi visual untuk beberapa karakter sekaligus—tampak depan, samping, belakang, dan close-up wajah.</p></div>
-              <button className="characterSheetBtn" onClick={generateCharacterSheet} disabled={characterSheetLoading}>
-                {characterSheetLoading ? <><span className="spinner"/> MEMBUAT CHARACTER SHEET...</> : characterSheet ? "↻ BUAT ULANG CHARACTER SHEET" : "✦ DETEKSI KARAKTER & BUAT SHEET"}
-              </button>
-            </div>
-            {characterSheetError && <div className="error imageError">{characterSheetError}</div>}
-            {characterSheet && <div className="characterSheetResult"><img src={characterSheet} alt="Character sheet realistis berdasarkan prompt cerita"/><p>Gunakan gambar ini sebagai referensi visual agar karakter tetap konsisten antar-adegan.</p></div>}
+        <form onSubmit={generateStoryboard} style={styles.panel}>
+          <h2 style={{ marginTop: 0, fontSize: "21px" }}>Buat storyboard baru</h2>
+          <p style={{ color: "#a6a1b5", fontSize: "14px", lineHeight: 1.6 }}>Mulai dari ide sederhana dan biarkan AI membantu mengembangkan adegan.</p>
+          <div style={{ marginTop: "24px" }}><label htmlFor="idea" style={styles.label}>IDE CERITAMU</label><textarea id="idea" value={idea} onChange={(e) => { setIdea(e.target.value); if (!storyboard) setCharacterPrompt(""); }} placeholder="Tuliskan ide cerita dan karakter utama..." required rows={5} maxLength={5000} style={{ ...styles.field, resize: "vertical", lineHeight: 1.7 }} /><div style={{ color: "#777286", fontSize: "12px", textAlign: "right", marginTop: "6px" }}>{idea.length}/5000 karakter</div></div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "18px", marginTop: "20px" }}>
+            <div><label htmlFor="genre" style={styles.label}>GENRE / GAYA VISUAL</label><select id="genre" value={genre} onChange={(e) => setGenre(e.target.value)} style={styles.field}>{["Sci-Fi","Fantasy","Cinematic","Action","Adventure","Horror","Drama","Comedy","Thriller","Animation"].map((g) => <option key={g} value={g}>{g}</option>)}</select></div>
+            <div><label htmlFor="sceneCount" style={styles.label}>JUMLAH ADEGAN</label><select id="sceneCount" value={sceneCount} onChange={(e) => setSceneCount(e.target.value)} style={styles.field}>{["3","6","9","12"].map((n) => <option key={n} value={n}>{n} adegan</option>)}</select></div>
           </div>
-          <div className="boardMeta"><span><b>{board.scenes.length}</b> SCENES</span><span><b>16:9</b> ASPECT RATIO</span><span><b>{board.estimated_duration||duration}</b> EST. DURATION</span></div>
-          <div className="sceneStrip">{board.scenes.map((s,i)=><button key={s.scene} className={active===i?"sceneThumb selected":"sceneThumb"} onClick={()=>setActive(i)}><span className="thumbNum">{String(s.scene).padStart(2,"0")}</span><span className="thumbArt" style={{"--sceneHue":`${(i*43+195)%360}`} as React.CSSProperties}>{sceneImages[s.scene] ? <img src={sceneImages[s.scene]} alt={`Visual ${s.title}`} /> : <i>{["◒","⌁","△","✳","◌","◈"][i%6]}</i>}</span><span className="thumbTitle">{s.title}</span></button>)}</div>
-          {current && <div className="sceneDetail">
-            <div className="sceneHeading"><div><span className="sceneLabel">SCENE {String(current.scene).padStart(2,"0")} / {String(board.scenes.length).padStart(2,"0")}</span><h3>{current.title}</h3></div><span className="durationChip">{current.duration}</span></div>
-            <div className="visualFrame" style={{"--sceneHue":`${(active*43+195)%360}`} as React.CSSProperties}>
-              {sceneImages[current.scene] ? <img className="generatedSceneImage" src={sceneImages[current.scene]} alt={`Visual adegan ${current.scene}: ${current.title}`} /> : <div className="abstractScene"><div className="sun"/><div className="mountain m1"/><div className="mountain m2"/><div className="ground"/><div className="figure"><i/></div><div className="sceneCaption">{current.location || "VISUAL FRAME"} <span>•</span> {current.time_of_day || "DAY"}</div></div>}
-              <div className="visualOverlay"><span className="frameBadge">FRAME {String(current.scene).padStart(2,"0")}</span><span className="frameRatio">16:9</span></div>
-              {!sceneImages[current.scene] && <div className="visualNotice">PRATINJAU SEMENTARA · buat gambar AI di bawah</div>}
-            </div>
-            <div className="imageGenerateRow">
-              <button className="generateImageBtn" onClick={() => generateSceneImage(current)} disabled={imageLoading}>
-                {imageLoading ? <><span className="spinner"/> SEDANG MEMBUAT GAMBAR...</> : sceneImages[current.scene] ? "↻ BUAT ULANG GAMBAR ADEGAN" : "✦ BUAT GAMBAR AI UNTUK ADEGAN INI"}
-              </button>
-              <span className="imageCostNote">Memerlukan akses model gambar Gemini.</span>
-            </div>
-            {imageErrors[current.scene] && <div className="error imageError">{imageErrors[current.scene]}</div>}
-            <div className="sceneInfoGrid">
-              <div className="infoCard"><span className="infoLabel">SHOT & CAMERA</span><h4>{current.shot_type}</h4><p>{current.camera_movement}</p></div>
-              <div className="infoCard"><span className="infoLabel">COMPOSITION</span><p>{current.composition}</p></div>
-              <div className="infoCard wide"><span className="infoLabel">ACTION / BEAT</span><p>{current.action}</p></div>
-              <div className="infoCard"><span className="infoLabel">LIGHT & COLOR</span><p>{current.lighting_color}</p></div>
-              <div className="infoCard"><span className="infoLabel">SOUND DESIGN</span><p>{current.sound}</p></div>
-              <div className="infoCard wide"><span className="infoLabel">DIALOGUE</span><p className="dialogue">{current.dialogue || "— Tanpa dialog —"}</p></div>
-              <div className="infoCard wide continuity"><span className="infoLabel">CONTINUITY NOTES</span><p>{current.continuity}</p></div>
-            </div>
-            <div className="imagePromptBox"><div><span className="infoLabel">IMAGE GENERATION PROMPT</span><p>{current.image_prompt}</p></div><button onClick={()=>copyPrompt(current.image_prompt)}>{copied?"✓ COPIED":"COPY PROMPT"}</button></div>
-            <div className="sceneNav"><button onClick={()=>setActive(Math.max(0,active-1))} disabled={active===0}>← PREVIOUS SCENE</button><span>{active+1} <i>/</i> {board.scenes.length}</span><button onClick={()=>setActive(Math.min(board.scenes.length-1,active+1))} disabled={active===board.scenes.length-1}>NEXT SCENE →</button></div>
-          </div>}
-        </>}
-      </section>
-    </section>
-    <footer><span>FRAMEFORGE © 2026</span><span>BUILT FOR VISUAL STORYTELLERS</span><span>16:9 · SCENE BY SCENE</span></footer>
-  </main>;
+          {error && <div role="alert" style={{ marginTop: "20px", padding: "14px", background: "#321c28", color: "#ffb4c0", borderRadius: "10px", lineHeight: 1.6 }}>{error}</div>}
+          <button type="submit" disabled={loading} style={{ marginTop: "24px", width: "100%", padding: "16px", border: "none", borderRadius: "11px", background: loading ? "#65538e" : "#a78bfa", color: "#171020", fontSize: "15px", fontWeight: 800, cursor: loading ? "wait" : "pointer" }}>{loading ? "Sedang membuat storyboard..." : "✦ Buat Storyboard"}</button>
+          <p style={{ color: "#817b91", fontSize: "12px", textAlign: "center", marginBottom: 0, lineHeight: 1.6 }}>Hasil AI mungkin perlu ditinjau dan disunting kembali.</p>
+        </form>
+
+        {loading && <div role="status" style={{ ...styles.panel, textAlign: "center", color: "#c4b5fd", lineHeight: 1.8 }}>Sedang mengembangkan adeganmu...<p style={{ color: "#a6a1b5", fontSize: "14px" }}>AI sedang mengolah ceritamu. Proses ini mungkin membutuhkan waktu.</p></div>}
+
+        {(storyboard || idea.trim()) && !loading && <section style={styles.panel}>
+          <div style={{ color: "#b6a0ff", fontSize: "12px", letterSpacing: "2px", fontWeight: 800 }}>CHARACTER STUDIO</div>
+          <h2 style={{ fontSize: "25px", marginBottom: "8px" }}>Deteksi Karakter & Buat Sheet</h2>
+          <p style={{ color: "#a6a1b5", fontSize: "14px", lineHeight: 1.7 }}>Siapkan prompt lembar referensi karakter dari ide cerita atau storyboard. Kamu bisa mengedit prompt sebelum mengirimnya ke API gambar.</p>
+          <button type="button" onClick={prepareCharacterPrompt} style={styles.secondaryButton}>✦ Buat / Perbarui Prompt Karakter</button>
+          <div style={{ marginTop: "18px" }}><label htmlFor="characterPrompt" style={styles.label}>PROMPT CHARACTER SHEET</label><textarea id="characterPrompt" value={characterPrompt} onChange={(e) => setCharacterPrompt(e.target.value)} placeholder="Klik 'Buat / Perbarui Prompt Karakter' untuk menyusun prompt otomatis..." rows={12} style={{ ...styles.field, resize: "vertical", lineHeight: 1.7 }} /></div>
+          <button type="button" disabled={characterLoading} onClick={generateCharacterSheet} style={{ marginTop: "16px", width: "100%", padding: "16px", border: "none", borderRadius: "11px", background: characterLoading ? "#65538e" : "#a78bfa", color: "#171020", fontSize: "15px", fontWeight: 800, cursor: characterLoading ? "wait" : "pointer" }}>{characterLoading ? "Sedang membuat Character Sheet..." : "✦ Deteksi Karakter & Buat Sheet"}</button>
+          <p style={{ color: "#817b91", fontSize: "12px", lineHeight: 1.6 }}>Membuat gambar memerlukan API Character Sheet yang aktif dan model Gemini yang mendukung pembuatan gambar. Permintaan dapat gagal jika layanan sedang sibuk.</p>
+          {characterError && <div role="alert" style={{ marginTop: "16px", padding: "14px", background: "#321c28", color: "#ffb4c0", borderRadius: "10px", lineHeight: 1.6, overflowWrap: "anywhere" }}>{characterError}</div>}
+          {characterImage && <div style={{ marginTop: "20px" }}><h3>Hasil Character Sheet</h3><img src={characterImage} alt="Character Sheet hasil generasi AI" style={{ display: "block", width: "100%", height: "auto", borderRadius: "12px", border: "1px solid #373447" }} /><a href={characterImage} download="frameforge-character-sheet.jpg" style={{ display: "inline-block", marginTop: "12px", color: "#c4b5fd" }}>Simpan gambar Character Sheet</a></div>}
+        </section>}
+
+        {storyboard && !loading && <section style={styles.panel}>
+          <div style={{ color: "#b6a0ff", fontSize: "12px", letterSpacing: "2px", fontWeight: 800 }}>STORYBOARD KAMU</div><h2 style={{ fontSize: "26px", marginBottom: "20px" }}>{genre} · {scenes.length} panel</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>{scenes.map((scene, index) => <article key={`${index}-${scene.title}`} style={{ background: "#0d0d14", border: "1px solid #373447", borderRadius: "14px", overflow: "hidden", minWidth: 0 }}><div style={{ aspectRatio: "16 / 9", background: "linear-gradient(135deg, #211b35, #392653, #11111a)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "8px", color: "#c4b5fd", padding: "16px", textAlign: "center" }}><span style={{ fontSize: "30px" }}>🎬</span><span style={{ fontSize: "12px" }}>VISUAL ADEGAN {String(index + 1).padStart(2, "0")}</span><span style={{ fontSize: "11px", color: "#a6a1b5" }}>Gambar AI akan ditampilkan di sini</span></div><div style={{ padding: "18px" }}><div style={{ color: "#b6a0ff", fontSize: "11px", fontWeight: 800, letterSpacing: "1px", marginBottom: "8px" }}>ADEGAN {String(index + 1).padStart(2, "0")}</div><h3 style={{ fontSize: "17px", margin: "0 0 12px" }}>{scene.title}</h3><div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", color: "#c9c4d6", fontSize: "13px", lineHeight: 1.8 }}>{scene.content}</div></div></article>)}</div>
+          <button type="button" onClick={copyStoryboard} style={{ ...styles.secondaryButton, marginTop: "24px" }}>Salin seluruh storyboard</button>{copyMessage && <p role="status" style={{ color: "#c4b5fd", fontSize: "13px" }}>{copyMessage}</p>}
+        </section>}
+        <footer style={{ marginTop: "36px", paddingTop: "20px", borderTop: "1px solid #292735", color: "#777286", fontSize: "12px", lineHeight: 1.8, textAlign: "center" }}>FRAMEFORGE AI · Wujudkan ide sinematikmu</footer>
+      </div>
+    </main>
+  );
 }
