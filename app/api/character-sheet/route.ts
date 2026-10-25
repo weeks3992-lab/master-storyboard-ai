@@ -34,6 +34,10 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+    const base = (
+  process.env.GEMINI_API_BASE ||
+  "https://generativelanguage.googleapis.com/v1beta"
+).replace(/\/$/, "");
 
    
     const model = process.env.GEMINI_TEXT_MODEL || "gemini-3.8-flash";
